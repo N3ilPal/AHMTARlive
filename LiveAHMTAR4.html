@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Mobility Rehab Test</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Roboto Mono', monospace; background-color: #111827; }
+        .loader { border-top-color: #3498db; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .result-row { animation: fadeIn 0.5s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js" crossorigin="anonymous"></script>
+</head>
+<body class="text-white flex items-center justify-center min-h-screen antialiased select-none">
+
+    <main class="w-full max-w-4xl mx-auto p-4 md:p-8 text-center">
+        <h1 class="text-4xl md:text-5xl font-bold text-cyan-400 mb-2">Rehab Metrics</h1>
+        
+        <div class="relative w-full aspect-video bg-gray-800 rounded-2xl shadow-xl shadow-black/20 mb-6 overflow-hidden border border-gray-700">
+            <video id="webcam" class="hidden" playsinline autoplay></video>
+            <canvas id="output_canvas" class="absolute top-0 left-0 w-full h-full"></canvas>
+            
+            <div id="loading-view" class="absolute inset-0 flex flex-col items-center justify-center bg-gray-900/90 z-20 hidden">
+                <div class="loader ease-linear rounded-full border-8 border-t-8 border-gray-600 h-24 w-24 mb-4"></div>
+                <p id="loading-text" class="text-lg text-cyan-500">Initializing Tracking...</p>
+            </div>
+            
+            <button id="start-btn" class="absolute inset-0 flex items-center justify-center bg-gray-900/80 z-30 cursor-pointer backdrop-blur-sm">
+                <div class="bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-4 px-10 rounded-xl shadow-2xl transition-all transform hover:scale-105 text-xl border border-cyan-400">
+                    Start Evaluation
+                </div>
+            </button>
+
+            <div id="test-instructions" class="absolute top-0 left-0 w-full p-4 bg-black/70 text-white text-xl font-bold z-10 hidden tracking-wider">
+                Instructions
+            </div>
+
+            <button id="flip-btn" class="absolute top-4 right-4 z-50 bg-gray-900/90 hover:bg-gray-700 text-white p-3 rounded-lg border-2 border-cyan-500 shadow-lg transition-transform hover:scale-105 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                </svg>
+                <span class="font-bold text-sm">FLIP CAM</span>
+            </button>
+            
+            <div id="center-feedback" class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-5xl font-black hidden z-10 pointer-events-none drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)] text-center w-full">
+            </div>
+
+            <div id="test-counter" class="absolute bottom-4 right-4 text-green-400 text-4xl font-mono font-bold z-10 drop-shadow-md">
+            </div>
+        </div>
+        
+        <div class="bg-gray-800 rounded-2xl shadow-xl shadow-black/20 p-6 border border-gray-700">
+            <div class="flex justify-between items-center mb-4 border-b border-gray-700 pb-2">
+                <h2 class="text-2xl font-bold text-cyan-400">Session Results</h2>
+                <span id="total-timer" class="text-gray-400 font-mono text-sm">Timer: 0.0s</span>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <ul id="results-list" class="text-left space-y-3 text-sm">
+                        <li class="text-gray-500 italic">Tests pending...</li>
+                    </ul>
+                </div>
+                <div class="flex flex-col justify-center items-center bg-gray-900/50 rounded-xl p-4 border border-gray-700">
+                    <span class="text-gray-400 text-sm uppercase tracking-widest mb-1">Final Score</span>
+                    <span id="final-score" class="text-4xl font-bold text-gray-600">--</span>
+                    <span class="text-xs text-gray-500 mt-2">Avg Time / Test</span>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script type="module">
+        const videoElement = document.getElementById('webcam');
+        const canvasElement = document.getElementById('output_canvas');
+        const canvasCtx = canvasElement.getContext('2d');
+        const startBtn = document.getElementById('start-btn');
+        const flipBtn = document.getElementById('flip-btn'); 
+        const loadingView = document.getElementById('loading-view');
+        const instructionsText = document.getElementById('test-instructions');
+        const counterText = document.getElementById('test-counter');
+        const resultsList = document.getElementById('results-list');
+        const centerFeedback = document.getElementById('center-feedback');
+        const finalScoreDisplay = document.getElementById('final-score');
+        const totalTimerDisplay = document.getElementById('total-timer');
+
+        // State for Camera Mirroring
+        let isMirrored = true;
+
+        const TESTS = [
+            "1. Raise both arms above head",
+            "2. RIGHT Fist: Clench 5 times",
+            "3. LEFT Fist: Clench 5 times",
+            "4. LEFT Hand: Swipe across face",
+            "BUFFER", 
+            "5. RIGHT Hand: Swipe across face"
+        ];
+
+        let testState = {
+            testIndex: 0,
+            startTime: 0,         
+            rightCount: 0,
+            leftCount: 0,
+            rightFistClosed: false,
+            leftFistClosed: false,
+            leftSwipeReady: false,
+            rightSwipeReady: false,
+            bufferEndTime: 0,
+            testData: []
+        };
+
+        // --- Toggle Camera Logic ---
+        flipBtn.addEventListener('click', () => {
+            isMirrored = !isMirrored;
+            // Visual feedback on button click
+            flipBtn.classList.add('bg-cyan-700');
+            setTimeout(() => flipBtn.classList.remove('bg-cyan-700'), 200);
+        });
+
+        function calculateDistance(p1, p2) {
+            if (!p1 || !p2) return 0;
+            return Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
+        }
+
+        function isFistClosed(handLandmarks) {
+            if (!handLandmarks) return null;
+            const wrist = handLandmarks[0];
+            const middleMCP = handLandmarks[9];
+            const handScale = calculateDistance(wrist, middleMCP);
+            if (handScale < 0.005) return null;
+
+            const tips = [8, 12, 16, 20].map(i => handLandmarks[i]);
+            let closedFingers = 0;
+            const THRESHOLD = 1.3; 
+
+            tips.forEach(tip => {
+                if (calculateDistance(tip, wrist) < handScale * THRESHOLD) closedFingers++;
+            });
+            return closedFingers >= 3;
+        }
+
+        function startNextTest() {
+            if (testState.testIndex < TESTS.length && TESTS[testState.testIndex] !== "BUFFER") {
+                const duration = (Date.now() - testState.startTime) / 1000;
+                testState.testData.push({
+                    name: TESTS[testState.testIndex],
+                    time: duration
+                });
+                updateResultsUI();
+            }
+
+            testState.testIndex++;
+            resetStepFlags();
+
+            if (testState.testIndex >= TESTS.length) {
+                finishExam();
+                return;
+            }
+
+            if (TESTS[testState.testIndex] === "BUFFER") {
+                testState.bufferEndTime = Date.now() + 3500; 
+                testState.startTime = Date.now(); 
+            } else {
+                testState.startTime = Date.now();
+                centerFeedback.classList.add('hidden');
+            }
+        }
+
+        function resetStepFlags() {
+            testState.rightCount = 0;
+            testState.leftCount = 0;
+            testState.rightFistClosed = false;
+            testState.leftFistClosed = false;
+            testState.leftSwipeReady = false;
+            testState.rightSwipeReady = false;
+            counterText.textContent = '';
+        }
+
+        function finishExam() {
+            instructionsText.textContent = "Evaluation Complete";
+            instructionsText.classList.remove('bg-black/70');
+            instructionsText.classList.add('bg-green-600');
+            centerFeedback.innerHTML = "DONE!";
+            centerFeedback.classList.remove('hidden');
+            
+            const totalTime = testState.testData.reduce((acc, curr) => acc + curr.time, 0);
+            const avgTime = totalTime / testState.testData.length;
+            
+            finalScoreDisplay.textContent = avgTime.toFixed(2) + "s";
+            finalScoreDisplay.classList.remove('text-gray-600');
+            
+            if(avgTime < 3) finalScoreDisplay.classList.add('text-green-500');
+            else if(avgTime < 6) finalScoreDisplay.classList.add('text-yellow-500');
+            else finalScoreDisplay.classList.add('text-red-500');
+        }
+
+        function updateResultsUI() {
+            resultsList.innerHTML = '';
+            if (testState.testData.length === 0) {
+                resultsList.innerHTML = '<li class="text-gray-500 italic">Tests pending...</li>';
+                return;
+            }
+            
+            testState.testData.forEach((data, index) => {
+                const li = document.createElement('li');
+                li.className = "result-row flex justify-between items-center bg-gray-700/50 p-2 rounded border border-gray-600";
+                const cleanName = data.name.replace(/\d\.\s/, '').split(':')[0];
+                li.innerHTML = `
+                    <span class="flex items-center gap-2">
+                        <svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                        <span class="text-gray-200 font-medium">${cleanName}</span>
+                    </span>
+                    <span class="font-mono text-cyan-400">${data.time.toFixed(1)}s</span>
+                `;
+                resultsList.appendChild(li);
+            });
+        }
+
+        function runMobilityTests(results) {
+            const poseLandmarks = results.poseLandmarks;
+            if (!poseLandmarks || testState.testIndex >= TESTS.length) return;
+
+            const currentTestName = TESTS[testState.testIndex];
+
+            if (currentTestName === "BUFFER") {
+                const remaining = Math.ceil((testState.bufferEndTime - Date.now()) / 1000);
+                instructionsText.textContent = "Rest...";
+                centerFeedback.classList.remove('hidden');
+                centerFeedback.className = "absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-6xl font-black z-10 text-yellow-400 drop-shadow-xl";
+                centerFeedback.textContent = remaining > 0 ? remaining : "GO!";
+                
+                if (Date.now() > testState.bufferEndTime) {
+                    startNextTest();
+                }
+                return;
+            }
+
+            instructionsText.textContent = currentTestName;
+            instructionsText.classList.remove('hidden');
+            const elapsed = ((Date.now() - testState.startTime) / 1000).toFixed(1);
+            totalTimerDisplay.textContent = `Current: ${elapsed}s`;
+
+            if (testState.testIndex === 0) {
+                const leftWrist = poseLandmarks[15];
+                const rightWrist = poseLandmarks[16];
+                const nose = poseLandmarks[0];
+                if (leftWrist.y < nose.y && rightWrist.y < nose.y) {
+                    startNextTest();
+                }
+            }
+            else if (testState.testIndex === 1) {
+                const isClosed = isFistClosed(results.rightHandLandmarks);
+                if (isClosed !== null) {
+                    if (isClosed && !testState.rightFistClosed) {
+                        testState.rightFistClosed = true;
+                        counterText.classList.add('text-cyan-400');
+                    } else if (!isClosed && testState.rightFistClosed) {
+                        testState.rightCount++;
+                        testState.rightFistClosed = false;
+                        counterText.classList.remove('text-cyan-400');
+                    }
+                }
+                counterText.textContent = `${testState.rightCount}/5`;
+                if (testState.rightCount >= 5) startNextTest();
+            }
+            else if (testState.testIndex === 2) {
+                const isClosed = isFistClosed(results.leftHandLandmarks);
+                if (isClosed !== null) {
+                    if (isClosed && !testState.leftFistClosed) {
+                        testState.leftFistClosed = true;
+                        counterText.classList.add('text-cyan-400');
+                    } else if (!isClosed && testState.leftFistClosed) {
+                        testState.leftCount++;
+                        testState.leftFistClosed = false;
+                        counterText.classList.remove('text-cyan-400');
+                    }
+                }
+                counterText.textContent = `${testState.leftCount}/5`;
+                if (testState.leftCount >= 5) startNextTest();
+            }
+            else if (testState.testIndex === 3) {
+                const leftWrist = poseLandmarks[15];
+                const leftShoulder = poseLandmarks[11];
+                const nose = poseLandmarks[0];
+                const rightWrist = poseLandmarks[16];
+                
+                if (rightWrist.x > nose.x && rightWrist.x < leftShoulder.x) {
+                     centerFeedback.classList.remove('hidden');
+                     centerFeedback.className = "absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-4xl font-bold z-10 text-red-500 bg-black/80 p-4 rounded";
+                     centerFeedback.textContent = "USE LEFT HAND!";
+                     return; 
+                } else {
+                     if (!testState.leftSwipeReady) centerFeedback.classList.add('hidden'); 
+                }
+
+                if (!testState.leftSwipeReady) {
+                    if (leftWrist.x > leftShoulder.x) {
+                        testState.leftSwipeReady = true;
+                        centerFeedback.classList.remove('hidden');
+                        centerFeedback.className = "absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-4xl font-bold z-10 text-cyan-400";
+                        centerFeedback.textContent = "SWIPE >>";
+                    }
+                } else {
+                    if (leftWrist.x < nose.x) {
+                        startNextTest();
+                    }
+                }
+            }
+            else if (testState.testIndex === 5) { 
+                const rightWrist = poseLandmarks[16];
+                const rightShoulder = poseLandmarks[12];
+                const nose = poseLandmarks[0];
+                const leftWrist = poseLandmarks[15];
+                
+                if (leftWrist.x < nose.x && leftWrist.x > rightShoulder.x) {
+                     centerFeedback.classList.remove('hidden');
+                     centerFeedback.className = "absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-4xl font-bold z-10 text-red-500 bg-black/80 p-4 rounded";
+                     centerFeedback.textContent = "USE RIGHT HAND!";
+                     return; 
+                } else {
+                     if (!testState.rightSwipeReady) centerFeedback.classList.add('hidden');
+                }
+
+                if (!testState.rightSwipeReady) {
+                    if (rightWrist.x < rightShoulder.x) {
+                        testState.rightSwipeReady = true;
+                        centerFeedback.classList.remove('hidden');
+                        centerFeedback.className = "absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-4xl font-bold z-10 text-cyan-400";
+                        centerFeedback.textContent = "<< SWIPE";
+                    }
+                } else {
+                    if (rightWrist.x > nose.x) {
+                        startNextTest();
+                    }
+                }
+            }
+        }
+        
+        function onResults(results) {
+            loadingView.classList.add('hidden');
+            
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            
+            // --- DYNAMIC MIRRORING ---
+            if (isMirrored) {
+                canvasCtx.translate(canvasElement.width, 0);
+                canvasCtx.scale(-1, 1);
+            }
+            // -------------------------
+
+            canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+            drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {color: '#374151', lineWidth: 4}); 
+            drawLandmarks(canvasCtx, results.poseLandmarks, {color: '#06b6d4', lineWidth: 2, radius: 4}); 
+            
+            if (results.leftHandLandmarks) {
+                drawConnectors(canvasCtx, results.leftHandLandmarks, HAND_CONNECTIONS, {color: '#eab308', lineWidth: 3}); 
+            }
+            if (results.rightHandLandmarks) {
+                drawConnectors(canvasCtx, results.rightHandLandmarks, HAND_CONNECTIONS, {color: '#ec4899', lineWidth: 3}); 
+            }
+            
+            runMobilityTests(results);
+            canvasCtx.restore();
+        }
+
+        const holistic = new Holistic({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`});
+        holistic.setOptions({
+            modelComplexity: 1,
+            smoothLandmarks: true,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+        });
+        holistic.onResults(onResults);
+
+        startBtn.addEventListener('click', () => {
+            startBtn.classList.add('hidden');
+            loadingView.classList.remove('hidden');
+            const camera = new Camera(videoElement, {
+                onFrame: async () => {
+                    if (videoElement.videoWidth > 0 && canvasElement.width !== videoElement.videoWidth) {
+                        canvasElement.width = videoElement.videoWidth;
+                        canvasElement.height = videoElement.videoHeight;
+                    }
+                    await holistic.send({image: videoElement});
+                },
+                width: 1280,
+                height: 720
+            });
+            camera.start();
+            testState.startTime = Date.now(); 
+        });
+
+    </script>
+</body>
+</html>
