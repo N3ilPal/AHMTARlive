@@ -3,130 +3,314 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart Mobility Rehab Test</title>
+    <title>AHMTAR | Clinical Interface</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Roboto Mono', monospace; background-color: #111827; }
-        .loader { border-top-color: #3498db; animation: spin 1s linear infinite; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .result-row { animation: fadeIn 0.5s ease-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        body { 
+            font-family: 'JetBrains Mono', monospace; 
+            background-color: #030712; /* Deepest black/blue */
+            color: #ecfeff;
+            overflow-x: hidden;
+        }
+        
+        /* CRT Scanline Effect */
+        .scanline {
+            width: 100%;
+            height: 100px;
+            z-index: 10;
+            background: linear-gradient(0deg, rgba(0,0,0,0) 0%, rgba(6, 182, 212, 0.1) 50%, rgba(0,0,0,0) 100%);
+            opacity: 0.1;
+            position: absolute;
+            bottom: 100%;
+            animation: scanline 10s linear infinite;
+            pointer-events: none;
+        }
+        @keyframes scanline {
+            0% { bottom: 100%; }
+            100% { bottom: -100%; }
+        }
+
+        /* Medical Grid Background */
+        .medical-grid {
+            background-image: linear-gradient(rgba(6, 182, 212, 0.1) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(6, 182, 212, 0.1) 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+
+        /* Scrollbar for logs */
+        .log-scroll::-webkit-scrollbar { width: 6px; }
+        .log-scroll::-webkit-scrollbar-track { background: #111827; }
+        .log-scroll::-webkit-scrollbar-thumb { background: #0891b2; border-radius: 3px; }
+
+        /* Animations */
+        .pulse-dot { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+        
+        .fade-in-up { animation: fadeInUp 0.5s ease-out; }
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js" crossorigin="anonymous"></script>
 </head>
-<body class="text-white flex items-center justify-center min-h-screen antialiased select-none">
+<body class="medical-grid min-h-screen flex flex-col p-4">
 
-    <main class="w-full max-w-4xl mx-auto p-4 md:p-8 text-center">
-        <h1 class="text-4xl md:text-5xl font-bold text-cyan-400 mb-2">Rehab Metrics</h1>
-        
-        <div class="relative w-full aspect-video bg-gray-800 rounded-2xl shadow-xl shadow-black/20 mb-6 overflow-hidden border border-gray-700">
-            <video id="webcam" class="hidden" playsinline autoplay></video>
-            <canvas id="output_canvas" class="absolute top-0 left-0 w-full h-full"></canvas>
-            
-            <div id="loading-view" class="absolute inset-0 flex flex-col items-center justify-center bg-gray-900/90 z-20 hidden">
-                <div class="loader ease-linear rounded-full border-8 border-t-8 border-gray-600 h-24 w-24 mb-4"></div>
-                <p id="loading-text" class="text-lg text-cyan-500">Initializing Tracking...</p>
-            </div>
-            
-            <button id="start-btn" class="absolute inset-0 flex items-center justify-center bg-gray-900/80 z-30 cursor-pointer backdrop-blur-sm">
-                <div class="bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-4 px-10 rounded-xl shadow-2xl transition-all transform hover:scale-105 text-xl border border-cyan-400">
-                    Start Evaluation
-                </div>
-            </button>
-
-            <div id="test-instructions" class="absolute top-0 left-0 w-full p-4 bg-black/70 text-white text-xl font-bold z-10 hidden tracking-wider">
-                Instructions
-            </div>
-
-            <button id="flip-btn" class="absolute top-4 right-4 z-50 bg-gray-900/90 hover:bg-gray-700 text-white p-3 rounded-lg border-2 border-cyan-500 shadow-lg transition-transform hover:scale-105 flex items-center gap-2">
+    <header class="flex justify-between items-center border-b border-cyan-900/50 pb-4 mb-6 bg-gray-900/80 backdrop-blur-md p-4 rounded-lg sticky top-0 z-50">
+        <div class="flex items-center gap-4">
+            <div class="h-10 w-10 bg-cyan-900/30 rounded flex items-center justify-center border border-cyan-500/50">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-                <span class="font-bold text-sm">FLIP CAM</span>
-            </button>
-            
-            <div id="center-feedback" class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-5xl font-black hidden z-10 pointer-events-none drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)] text-center w-full">
             </div>
-
-            <div id="test-counter" class="absolute bottom-4 right-4 text-green-400 text-4xl font-mono font-bold z-10 drop-shadow-md">
+            <div>
+                <h1 class="text-2xl font-bold tracking-tighter text-cyan-400">AHMTAR <span class="text-xs align-top text-gray-500">v2.0</span></h1>
+                <p class="text-[10px] text-cyan-700 uppercase tracking-widest">Mobility Tracking // CLaP Lab</p>
             </div>
         </div>
-        
-        <div class="bg-gray-800 rounded-2xl shadow-xl shadow-black/20 p-6 border border-gray-700">
-            <div class="flex justify-between items-center mb-4 border-b border-gray-700 pb-2">
-                <h2 class="text-2xl font-bold text-cyan-400">Session Results</h2>
-                <span id="total-timer" class="text-gray-400 font-mono text-sm">Timer: 0.0s</span>
+        <div class="flex items-center gap-6">
+            <div class="text-right hidden md:block">
+                <p class="text-[10px] text-gray-400 uppercase">System Status</p>
+                <p class="text-xs text-green-400 font-bold flex items-center justify-end gap-2">
+                    ONLINE <span class="w-2 h-2 bg-green-500 rounded-full pulse-dot"></span>
+                </p>
+            </div>
+            <button id="about-btn" class="px-3 py-1 border border-cyan-800 text-cyan-600 text-xs hover:bg-cyan-900/20 rounded transition">
+                [ INFO ]
+            </button>
+        </div>
+    </header>
+
+    <div id="info-panel" class="hidden fixed inset-0 bg-black/90 z-[60] flex items-center justify-center p-4">
+        <div class="bg-gray-900 border border-cyan-500/30 max-w-2xl w-full p-8 rounded-xl shadow-[0_0_50px_rgba(6,182,212,0.2)] relative">
+            
+            <button onclick="document.getElementById('info-panel').classList.add('hidden')" class="absolute top-4 right-4 text-gray-500 hover:text-white">
+                <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+
+            <div class="mb-4">
+                <h3 class="text-xl font-bold text-cyan-400 mb-2">Our Mission</h3>
+                <p class="text-gray-300 text-sm leading-relaxed">
+                    <strong class="text-white">AHMTAR</strong> (Advanced Human Mobility Tracking and Rehabilitation) is a pioneering initiative designed to democratize access to neurological recovery tools. 
+                    We empower survivors of stroke, dementia, and traumatic brain injury to monitor their mobility and track rehabilitation progress with precision—completely free of charge.
+                </p>
             </div>
             
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                    <ul id="results-list" class="text-left space-y-3 text-sm">
-                        <li class="text-gray-500 italic">Tests pending...</li>
-                    </ul>
+            <div class="border-t border-gray-700 pt-4 mb-6">
+                <h3 class="text-xl font-bold text-cyan-400 mb-2">Meet the Team</h3>
+                <p class="text-gray-300 text-sm leading-relaxed">
+                    AHMTAR was founded by <strong class="text-white">Neil Pal</strong> within the <strong class="text-white">Cognition, Language, and Plasticity (CLaP) Lab</strong> at <strong class="text-white">Chapman University</strong>, under the expert guidance of Lab Director <strong class="text-white">Zed Sehyr</strong>.
+                    Together with Research Aide <strong class="text-white">Vansh Bhavsar</strong>, the team is dedicated to bridging the gap between expensive clinical technology and accessible, at-home care.
+                </p>
+            </div>
+
+            <button onclick="document.getElementById('info-panel').classList.add('hidden')" class="w-full py-3 bg-cyan-900/50 hover:bg-cyan-800 text-cyan-300 text-sm font-bold border border-cyan-700 rounded transition uppercase tracking-widest">
+                Acknowledge & Close Protocol
+            </button>
+        </div>
+    </div>
+
+    <main class="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 relative">
+        
+        <div class="lg:col-span-8 relative flex flex-col">
+            <div class="relative w-full aspect-video bg-black rounded-xl border border-gray-800 overflow-hidden shadow-2xl shadow-cyan-900/10 group">
+                
+                <div class="scanline"></div>
+                
+                <div class="absolute top-4 left-4 w-8 h-8 border-t-2 border-l-2 border-cyan-500/50 z-20"></div>
+                <div class="absolute top-4 right-4 w-8 h-8 border-t-2 border-r-2 border-cyan-500/50 z-20"></div>
+                <div class="absolute bottom-4 left-4 w-8 h-8 border-b-2 border-l-2 border-cyan-500/50 z-20"></div>
+                <div class="absolute bottom-4 right-4 w-8 h-8 border-b-2 border-r-2 border-cyan-500/50 z-20"></div>
+
+                <video id="webcam" class="hidden" playsinline autoplay></video>
+                <canvas id="output_canvas" class="absolute inset-0 w-full h-full object-cover"></canvas>
+
+                <div id="start-overlay" class="absolute inset-0 bg-gray-900/90 z-30 flex flex-col items-center justify-center backdrop-blur-sm">
+                    <div class="text-cyan-500 text-6xl mb-6 animate-bounce">
+                        <svg class="w-20 h-20 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </div>
+                    <button id="start-btn" class="px-8 py-4 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-lg shadow-[0_0_20px_rgba(6,182,212,0.4)] transition-all transform hover:scale-105 tracking-wider">
+                        INITIALIZE SEQUENCE
+                    </button>
+                    <p class="mt-4 text-xs text-gray-500">Camera access required for telemetry</p>
                 </div>
-                <div class="flex flex-col justify-center items-center bg-gray-900/50 rounded-xl p-4 border border-gray-700">
-                    <span class="text-gray-400 text-sm uppercase tracking-widest mb-1">Final Score</span>
-                    <span id="final-score" class="text-4xl font-bold text-gray-600">--</span>
-                    <span class="text-xs text-gray-500 mt-2">Avg Time / Test</span>
+
+                <div id="loading-view" class="hidden absolute inset-0 bg-black/80 z-40 flex flex-col items-center justify-center">
+                    <div class="w-12 h-12 border-4 border-cyan-900 border-t-cyan-400 rounded-full animate-spin mb-4"></div>
+                    <p class="text-cyan-400 text-sm font-mono animate-pulse">CALIBRATING NEURAL NET...</p>
+                </div>
+
+                <div id="center-feedback" class="hidden absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none">
+                    <div class="bg-black/60 backdrop-blur-md border border-cyan-500/50 px-8 py-4 rounded text-center">
+                        <span id="feedback-text" class="text-4xl md:text-5xl font-black text-white tracking-tighter drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]">
+                            READY
+                        </span>
+                    </div>
+                </div>
+
+                <div id="instruction-panel" class="hidden absolute top-6 left-1/2 transform -translate-x-1/2 bg-gray-900/90 border border-gray-700 px-6 py-2 rounded-full z-20 shadow-lg">
+                    <span id="instruction-text" class="text-lg font-bold text-cyan-100">Initializing...</span>
+                </div>
+
+                 <div class="absolute bottom-6 left-6 z-20 flex items-center gap-2 opacity-50 hover:opacity-100 transition-opacity">
+                    <span class="text-2xl">👌</span>
+                    <span class="text-[10px] font-bold text-gray-300 uppercase bg-black/50 px-2 py-1 rounded">Hold to Skip</span>
+                </div>
+
+                <button id="flip-btn" class="absolute top-6 right-6 z-20 bg-gray-900/50 hover:bg-cyan-900/80 text-cyan-400 p-2 rounded-lg border border-cyan-500/30 transition">
+                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                </button>
+            </div>
+        </div>
+
+        <div class="lg:col-span-4 flex flex-col gap-4 h-full max-h-[calc(100vh-140px)]">
+            
+            <div class="bg-gray-800/50 border border-gray-700 p-6 rounded-xl flex items-center justify-between backdrop-blur-sm">
+                <div>
+                    <p class="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Live Metric</p>
+                    <div id="test-counter" class="text-4xl font-mono font-bold text-white">--</div>
+                </div>
+                <div class="text-right">
+                    <p class="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Session Timer</p>
+                    <div id="total-timer" class="text-xl font-mono text-cyan-400">0.0s</div>
                 </div>
             </div>
+
+            <div class="flex-1 bg-gray-900/50 border border-gray-800 rounded-xl overflow-hidden flex flex-col">
+                <div class="bg-gray-800/50 p-3 border-b border-gray-700 flex justify-between items-center">
+                    <span class="text-xs font-bold text-cyan-500 uppercase">Data Log</span>
+                    <div class="flex gap-1">
+                        <div class="w-2 h-2 rounded-full bg-red-500"></div>
+                        <div class="w-2 h-2 rounded-full bg-yellow-500"></div>
+                        <div class="w-2 h-2 rounded-full bg-green-500"></div>
+                    </div>
+                </div>
+                <ul id="results-list" class="flex-1 overflow-y-auto p-4 space-y-2 log-scroll text-sm font-mono">
+                    <li class="text-gray-600 italic text-xs text-center mt-10">Awaiting input stream...</li>
+                </ul>
+                
+                <div class="p-4 bg-gray-800/80 border-t border-gray-700">
+                    <div class="flex justify-between items-end">
+                        <span class="text-xs text-gray-400">AVG RESPONSE</span>
+                        <span id="final-score" class="text-2xl font-bold text-gray-500">--</span>
+                    </div>
+                </div>
+            </div>
+
         </div>
     </main>
 
     <script type="module">
+        // --- CONSTANTS & CONFIG ---
         const videoElement = document.getElementById('webcam');
         const canvasElement = document.getElementById('output_canvas');
         const canvasCtx = canvasElement.getContext('2d');
+        
+        // UI Elements
         const startBtn = document.getElementById('start-btn');
-        const flipBtn = document.getElementById('flip-btn'); 
+        const startOverlay = document.getElementById('start-overlay');
         const loadingView = document.getElementById('loading-view');
-        const instructionsText = document.getElementById('test-instructions');
+        const instructionPanel = document.getElementById('instruction-panel');
+        const instructionText = document.getElementById('instruction-text');
+        const feedbackEl = document.getElementById('center-feedback');
+        const feedbackText = document.getElementById('feedback-text');
         const counterText = document.getElementById('test-counter');
-        const resultsList = document.getElementById('results-list');
-        const centerFeedback = document.getElementById('center-feedback');
-        const finalScoreDisplay = document.getElementById('final-score');
         const totalTimerDisplay = document.getElementById('total-timer');
+        const resultsList = document.getElementById('results-list');
+        const finalScoreDisplay = document.getElementById('final-score');
+        const flipBtn = document.getElementById('flip-btn');
+        const aboutBtn = document.getElementById('about-btn');
 
-        // State for Camera Mirroring
         let isMirrored = true;
 
+        // Test Definition
         const TESTS = [
-            "1. Raise both arms above head",
-            "2. RIGHT Fist: Clench 5 times",
-            "3. LEFT Fist: Clench 5 times",
-            "4. LEFT Hand: Swipe across face",
+            "1. Raise Arms (Full Extension)",
+            "2. RIGHT Fist: Clench x5",
+            "3. LEFT Fist: Clench x5",
+            "4. LEFT Hand: Swipe Right >>",
             "BUFFER", 
-            "5. RIGHT Hand: Swipe across face"
+            "5. RIGHT Hand: Swipe Left <<",
+            "BUFFER",
+            "6. T-Pose: Hold (3s)",
+            "7. Right Hand: Count 1-5",
+            "8. Right Hand: Pinch Test",
+            "9. Touch Ears (Both)",
+            "10. Touch Head (Both)",
+            "11. Neck: Left then Right"
         ];
 
+        // State Machine
         let testState = {
             testIndex: 0,
-            startTime: 0,         
+            startTime: 0,          
             rightCount: 0,
             leftCount: 0,
             rightFistClosed: false,
             leftFistClosed: false,
             leftSwipeReady: false,
             rightSwipeReady: false,
+            fingerCountTarget: 1, 
+            pinchTarget: 0,
+            pinchRelease: true,
+            neckLeftDone: false,
+            neckRightDone: false,
             bufferEndTime: 0,
+            tPoseStartTime: null,
+            skipHoldTime: null,
             testData: []
         };
 
-        // --- Toggle Camera Logic ---
-        flipBtn.addEventListener('click', () => {
-            isMirrored = !isMirrored;
-            // Visual feedback on button click
-            flipBtn.classList.add('bg-cyan-700');
-            setTimeout(() => flipBtn.classList.remove('bg-cyan-700'), 200);
-        });
-
+        // --- UTILS ---
         function calculateDistance(p1, p2) {
             if (!p1 || !p2) return 0;
             return Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
+        }
+
+        function showFeedback(text, colorClass = "text-cyan-400") {
+            feedbackEl.classList.remove('hidden');
+            feedbackText.textContent = text;
+            feedbackText.className = `text-4xl md:text-5xl font-black ${colorClass} tracking-tighter drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]`;
+        }
+
+        function hideFeedback() {
+            feedbackEl.classList.add('hidden');
+        }
+
+        // --- CORE LOGIC ---
+
+        function detectSkipGesture(results) {
+            const checkHand = (landmarks) => {
+                if (!landmarks) return false;
+                const thumbTip = landmarks[4];
+                const indexTip = landmarks[8];
+                const middleTip = landmarks[12];
+                const pinchDist = calculateDistance(thumbTip, indexTip);
+                const openDist = calculateDistance(indexTip, middleTip);
+                return (pinchDist < 0.05 && openDist > 0.05);
+            };
+
+            if (checkHand(results.rightHandLandmarks) || checkHand(results.leftHandLandmarks)) {
+                if (!testState.skipHoldTime) testState.skipHoldTime = Date.now();
+                
+                // Visual Indicator for holding skip
+                const holdDuration = Date.now() - testState.skipHoldTime;
+                if (holdDuration > 200) {
+                    showFeedback(`SKIPPING... ${(1 - holdDuration/1000).toFixed(1)}`, "text-yellow-400");
+                }
+
+                if (holdDuration > 1000) {
+                    recordResult(TESTS[testState.testIndex] + " (SKIPPED)", 0);
+                    showFeedback("SKIPPED", "text-orange-500");
+                    testState.skipHoldTime = null;
+                    advanceTest();
+                }
+            } else {
+                testState.skipHoldTime = null;
+                // Only hide if we aren't showing something else important
+                if (feedbackText.textContent.includes("SKIPPING")) hideFeedback();
+            }
         }
 
         function isFistClosed(handLandmarks) {
@@ -135,27 +319,46 @@
             const middleMCP = handLandmarks[9];
             const handScale = calculateDistance(wrist, middleMCP);
             if (handScale < 0.005) return null;
-
             const tips = [8, 12, 16, 20].map(i => handLandmarks[i]);
             let closedFingers = 0;
             const THRESHOLD = 1.3; 
-
             tips.forEach(tip => {
                 if (calculateDistance(tip, wrist) < handScale * THRESHOLD) closedFingers++;
             });
             return closedFingers >= 3;
         }
 
-        function startNextTest() {
-            if (testState.testIndex < TESTS.length && TESTS[testState.testIndex] !== "BUFFER") {
-                const duration = (Date.now() - testState.startTime) / 1000;
-                testState.testData.push({
-                    name: TESTS[testState.testIndex],
-                    time: duration
-                });
-                updateResultsUI();
-            }
+        function countExtendedFingers(handLandmarks) {
+            if (!handLandmarks) return 0;
+            let count = 0;
+            const fingers = [[8, 6], [12, 10], [16, 14], [20, 18]];
+            // Thumb logic roughly
+            if (calculateDistance(handLandmarks[4], handLandmarks[17]) > calculateDistance(handLandmarks[3], handLandmarks[17])) count++;
+            fingers.forEach(pair => {
+                if (handLandmarks[pair[0]].y < handLandmarks[pair[1]].y) count++;
+            });
+            return count;
+        }
 
+        function recordResult(name, time) {
+            const li = document.createElement('li');
+            li.className = "fade-in-up flex justify-between items-center bg-gray-800/50 p-2 rounded border-l-2 border-cyan-500";
+            
+            const cleanName = name.replace(/\d\.\s/, '').split(':')[0];
+            li.innerHTML = `
+                <span class="text-gray-300 text-xs">${cleanName}</span>
+                <span class="font-mono text-cyan-400 font-bold">${time.toFixed(1)}s</span>
+            `;
+            
+            // Remove "pending" msg if exists
+            if (testState.testData.length === 0) resultsList.innerHTML = '';
+            
+            resultsList.prepend(li); // Add to top
+            
+            testState.testData.push({ name, time });
+        }
+
+        function advanceTest() {
             testState.testIndex++;
             resetStepFlags();
 
@@ -165,11 +368,11 @@
             }
 
             if (TESTS[testState.testIndex] === "BUFFER") {
-                testState.bufferEndTime = Date.now() + 3500; 
+                testState.bufferEndTime = Date.now() + 3000; 
                 testState.startTime = Date.now(); 
             } else {
                 testState.startTime = Date.now();
-                centerFeedback.classList.add('hidden');
+                hideFeedback();
             }
         }
 
@@ -180,81 +383,59 @@
             testState.leftFistClosed = false;
             testState.leftSwipeReady = false;
             testState.rightSwipeReady = false;
-            counterText.textContent = '';
+            testState.tPoseStartTime = null;
+            testState.fingerCountTarget = 1;
+            testState.pinchTarget = 0;
+            testState.pinchRelease = true;
+            testState.neckLeftDone = false;
+            testState.neckRightDone = false;
+            counterText.textContent = '--';
+            counterText.classList.remove('text-cyan-400', 'text-green-500');
         }
 
         function finishExam() {
-            instructionsText.textContent = "Evaluation Complete";
-            instructionsText.classList.remove('bg-black/70');
-            instructionsText.classList.add('bg-green-600');
-            centerFeedback.innerHTML = "DONE!";
-            centerFeedback.classList.remove('hidden');
+            instructionText.textContent = "SEQUENCE COMPLETE";
+            instructionPanel.classList.replace('bg-gray-900/90', 'bg-green-900/90');
+            showFeedback("COMPLETED", "text-green-400");
             
             const totalTime = testState.testData.reduce((acc, curr) => acc + curr.time, 0);
-            const avgTime = totalTime / testState.testData.length;
+            const avgTime = totalTime / (testState.testData.length || 1);
             
             finalScoreDisplay.textContent = avgTime.toFixed(2) + "s";
-            finalScoreDisplay.classList.remove('text-gray-600');
-            
-            if(avgTime < 3) finalScoreDisplay.classList.add('text-green-500');
-            else if(avgTime < 6) finalScoreDisplay.classList.add('text-yellow-500');
-            else finalScoreDisplay.classList.add('text-red-500');
+            finalScoreDisplay.classList.add(avgTime < 5 ? 'text-green-400' : 'text-yellow-400');
         }
 
-        function updateResultsUI() {
-            resultsList.innerHTML = '';
-            if (testState.testData.length === 0) {
-                resultsList.innerHTML = '<li class="text-gray-500 italic">Tests pending...</li>';
-                return;
-            }
-            
-            testState.testData.forEach((data, index) => {
-                const li = document.createElement('li');
-                li.className = "result-row flex justify-between items-center bg-gray-700/50 p-2 rounded border border-gray-600";
-                const cleanName = data.name.replace(/\d\.\s/, '').split(':')[0];
-                li.innerHTML = `
-                    <span class="flex items-center gap-2">
-                        <svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
-                        <span class="text-gray-200 font-medium">${cleanName}</span>
-                    </span>
-                    <span class="font-mono text-cyan-400">${data.time.toFixed(1)}s</span>
-                `;
-                resultsList.appendChild(li);
-            });
-        }
-
-        function runMobilityTests(results) {
-            const poseLandmarks = results.poseLandmarks;
-            if (!poseLandmarks || testState.testIndex >= TESTS.length) return;
+        function runTestLogic(results) {
+            if (testState.testIndex >= TESTS.length) return;
 
             const currentTestName = TESTS[testState.testIndex];
+            const pose = results.poseLandmarks;
 
+            // Update UI Labels
             if (currentTestName === "BUFFER") {
                 const remaining = Math.ceil((testState.bufferEndTime - Date.now()) / 1000);
-                instructionsText.textContent = "Rest...";
-                centerFeedback.classList.remove('hidden');
-                centerFeedback.className = "absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-6xl font-black z-10 text-yellow-400 drop-shadow-xl";
-                centerFeedback.textContent = remaining > 0 ? remaining : "GO!";
-                
-                if (Date.now() > testState.bufferEndTime) {
-                    startNextTest();
-                }
+                instructionText.textContent = "REST & RESET";
+                showFeedback(remaining > 0 ? remaining : "GO", "text-cyan-200");
+                if (Date.now() > testState.bufferEndTime) advanceTest();
                 return;
+            } else {
+                instructionPanel.classList.remove('hidden');
+                instructionText.textContent = currentTestName;
+                const elapsed = ((Date.now() - testState.startTime) / 1000).toFixed(1);
+                totalTimerDisplay.textContent = elapsed + "s";
             }
 
-            instructionsText.textContent = currentTestName;
-            instructionsText.classList.remove('hidden');
-            const elapsed = ((Date.now() - testState.startTime) / 1000).toFixed(1);
-            totalTimerDisplay.textContent = `Current: ${elapsed}s`;
+            if (!pose) return;
 
+            // 1. ARMS UP
             if (testState.testIndex === 0) {
-                const leftWrist = poseLandmarks[15];
-                const rightWrist = poseLandmarks[16];
-                const nose = poseLandmarks[0];
-                if (leftWrist.y < nose.y && rightWrist.y < nose.y) {
-                    startNextTest();
+                const lWrist = pose[15]; const rWrist = pose[16]; const nose = pose[0];
+                if (lWrist.y < nose.y && rWrist.y < nose.y) {
+                    recordResult(currentTestName, (Date.now() - testState.startTime) / 1000);
+                    advanceTest();
                 }
             }
+            // 2. RIGHT FIST
             else if (testState.testIndex === 1) {
                 const isClosed = isFistClosed(results.rightHandLandmarks);
                 if (isClosed !== null) {
@@ -267,9 +448,13 @@
                         counterText.classList.remove('text-cyan-400');
                     }
                 }
-                counterText.textContent = `${testState.rightCount}/5`;
-                if (testState.rightCount >= 5) startNextTest();
+                counterText.textContent = `${testState.rightCount} / 5`;
+                if (testState.rightCount >= 5) {
+                    recordResult(currentTestName, (Date.now() - testState.startTime)/1000);
+                    advanceTest();
+                }
             }
+            // 3. LEFT FIST
             else if (testState.testIndex === 2) {
                 const isClosed = isFistClosed(results.leftHandLandmarks);
                 if (isClosed !== null) {
@@ -282,96 +467,182 @@
                         counterText.classList.remove('text-cyan-400');
                     }
                 }
-                counterText.textContent = `${testState.leftCount}/5`;
-                if (testState.leftCount >= 5) startNextTest();
+                counterText.textContent = `${testState.leftCount} / 5`;
+                if (testState.leftCount >= 5) {
+                    recordResult(currentTestName, (Date.now() - testState.startTime)/1000);
+                    advanceTest();
+                }
             }
+            // 4. LEFT SWIPE
             else if (testState.testIndex === 3) {
-                const leftWrist = poseLandmarks[15];
-                const leftShoulder = poseLandmarks[11];
-                const nose = poseLandmarks[0];
-                const rightWrist = poseLandmarks[16];
-                
-                if (rightWrist.x > nose.x && rightWrist.x < leftShoulder.x) {
-                     centerFeedback.classList.remove('hidden');
-                     centerFeedback.className = "absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-4xl font-bold z-10 text-red-500 bg-black/80 p-4 rounded";
-                     centerFeedback.textContent = "USE LEFT HAND!";
-                     return; 
-                } else {
-                     if (!testState.leftSwipeReady) centerFeedback.classList.add('hidden'); 
-                }
-
+                const lWrist = pose[15]; const lShldr = pose[11]; const nose = pose[0];
+                // Check setup
                 if (!testState.leftSwipeReady) {
-                    if (leftWrist.x > leftShoulder.x) {
+                    if (lWrist.x > lShldr.x) { // Depending on mirror, check logic. Assuming standard mirror.
                         testState.leftSwipeReady = true;
-                        centerFeedback.classList.remove('hidden');
-                        centerFeedback.className = "absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-4xl font-bold z-10 text-cyan-400";
-                        centerFeedback.textContent = "SWIPE >>";
+                        showFeedback("SWIPE NOW >>");
+                    } else {
+                        showFeedback("EXTEND LEFT ARM");
                     }
                 } else {
-                    if (leftWrist.x < nose.x) {
-                        startNextTest();
+                    if (lWrist.x < nose.x) {
+                        recordResult(currentTestName, (Date.now() - testState.startTime)/1000);
+                        advanceTest();
                     }
                 }
             }
-            else if (testState.testIndex === 5) { 
-                const rightWrist = poseLandmarks[16];
-                const rightShoulder = poseLandmarks[12];
-                const nose = poseLandmarks[0];
-                const leftWrist = poseLandmarks[15];
-                
-                if (leftWrist.x < nose.x && leftWrist.x > rightShoulder.x) {
-                     centerFeedback.classList.remove('hidden');
-                     centerFeedback.className = "absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-4xl font-bold z-10 text-red-500 bg-black/80 p-4 rounded";
-                     centerFeedback.textContent = "USE RIGHT HAND!";
-                     return; 
-                } else {
-                     if (!testState.rightSwipeReady) centerFeedback.classList.add('hidden');
-                }
-
+            // 5. RIGHT SWIPE
+            else if (testState.testIndex === 5) {
+                const rWrist = pose[16]; const rShldr = pose[12]; const nose = pose[0];
                 if (!testState.rightSwipeReady) {
-                    if (rightWrist.x < rightShoulder.x) {
+                    if (rWrist.x < rShldr.x) {
                         testState.rightSwipeReady = true;
-                        centerFeedback.classList.remove('hidden');
-                        centerFeedback.className = "absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-4xl font-bold z-10 text-cyan-400";
-                        centerFeedback.textContent = "<< SWIPE";
+                        showFeedback("<< SWIPE NOW");
+                    } else {
+                        showFeedback("EXTEND RIGHT ARM");
                     }
                 } else {
-                    if (rightWrist.x > nose.x) {
-                        startNextTest();
+                    if (rWrist.x > nose.x) {
+                        recordResult(currentTestName, (Date.now() - testState.startTime)/1000);
+                        advanceTest();
                     }
                 }
             }
+            // 6. T-POSE
+            else if (testState.testIndex === 7) {
+                const lW = pose[15]; const lS = pose[11];
+                const rW = pose[16]; const rS = pose[12];
+                // Check if wrists are roughly level with shoulders
+                const inPos = (Math.abs(lW.y - lS.y) < 0.2 && Math.abs(rW.y - rS.y) < 0.2);
+                
+                if (inPos) {
+                    if (!testState.tPoseStartTime) testState.tPoseStartTime = Date.now();
+                    const holdTime = (Date.now() - testState.tPoseStartTime) / 1000;
+                    showFeedback((3 - holdTime).toFixed(1), "text-green-400");
+                    if (holdTime >= 3) {
+                        recordResult(currentTestName, (Date.now() - testState.startTime)/1000);
+                        advanceTest();
+                    }
+                } else {
+                    testState.tPoseStartTime = null;
+                    showFeedback("ALIGN ARMS");
+                }
+            }
+            // 7. COUNT
+            else if (testState.testIndex === 8) {
+                showFeedback(`SHOW ${testState.fingerCountTarget}`);
+                const count = countExtendedFingers(results.rightHandLandmarks);
+                counterText.textContent = `See: ${count}`;
+                if (count === testState.fingerCountTarget) {
+                    testState.fingerCountTarget++;
+                    if (testState.fingerCountTarget > 5) {
+                        recordResult(currentTestName, (Date.now() - testState.startTime)/1000);
+                        advanceTest();
+                    }
+                }
+            }
+            // 8. PINCH
+            else if (testState.testIndex === 9) {
+                const tips = [8, 12, 16, 20];
+                const names = ["Index", "Middle", "Ring", "Pinky"];
+                const targetIdx = testState.pinchTarget;
+                showFeedback(`PINCH: ${names[targetIdx]}`);
+                
+                if (results.rightHandLandmarks) {
+                    const thumb = results.rightHandLandmarks[4];
+                    const target = results.rightHandLandmarks[tips[targetIdx]];
+                    const dist = calculateDistance(thumb, target);
+                    
+                    if (testState.pinchRelease) {
+                        if (dist < 0.05) {
+                            testState.pinchRelease = false;
+                            testState.pinchTarget++;
+                            if (testState.pinchTarget >= 4) {
+                                recordResult(currentTestName, (Date.now() - testState.startTime)/1000);
+                                advanceTest();
+                            }
+                        }
+                    } else {
+                        if (dist > 0.08) {
+                            testState.pinchRelease = true;
+                        } else {
+                            showFeedback("RELEASE");
+                        }
+                    }
+                }
+            }
+            // 9. EARS
+            else if (testState.testIndex === 10) {
+                const lEar = pose[7]; const rEar = pose[8];
+                const lHand = pose[19]; const rHand = pose[20];
+                if (calculateDistance(lHand, lEar) < 0.15 && calculateDistance(rHand, rEar) < 0.15) {
+                    recordResult(currentTestName, (Date.now() - testState.startTime)/1000);
+                    advanceTest();
+                }
+            }
+             // 10. HEAD
+            else if (testState.testIndex === 11) {
+                const lHand = pose[19]; const rHand = pose[20]; const nose = pose[0];
+                if (lHand.y < nose.y - 0.2 && rHand.y < nose.y - 0.2) {
+                     recordResult(currentTestName, (Date.now() - testState.startTime)/1000);
+                     advanceTest();
+                }
+            }
+            // 11. NECK
+            else if (testState.testIndex === 12) {
+                const nose = pose[0]; const lS = pose[11]; const rS = pose[12];
+                if (!testState.neckLeftDone) {
+                    showFeedback("TURN LEFT");
+                    if (nose.x > lS.x) testState.neckLeftDone = true;
+                } else if (!testState.neckRightDone) {
+                    showFeedback("TURN RIGHT");
+                    if (nose.x < rS.x) testState.neckRightDone = true;
+                } else {
+                    recordResult(currentTestName, (Date.now() - testState.startTime)/1000);
+                    advanceTest();
+                }
+            }
+
         }
-        
+
         function onResults(results) {
             loadingView.classList.add('hidden');
             
+            // Draw
             canvasCtx.save();
             canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
             
-            // --- DYNAMIC MIRRORING ---
             if (isMirrored) {
                 canvasCtx.translate(canvasElement.width, 0);
                 canvasCtx.scale(-1, 1);
             }
-            // -------------------------
-
-            canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
-
-            drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {color: '#374151', lineWidth: 4}); 
-            drawLandmarks(canvasCtx, results.poseLandmarks, {color: '#06b6d4', lineWidth: 2, radius: 4}); 
             
+            // Draw Video
+            canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+            
+            // The "Cyber" Style Connectors
+            // Pose: Cyan & White
+            drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {color: 'rgba(6, 182, 212, 0.5)', lineWidth: 4});
+            drawLandmarks(canvasCtx, results.poseLandmarks, {color: '#ecfeff', lineWidth: 2, radius: 3});
+            
+            // Hands: Pink & Purple (Contrast)
             if (results.leftHandLandmarks) {
-                drawConnectors(canvasCtx, results.leftHandLandmarks, HAND_CONNECTIONS, {color: '#eab308', lineWidth: 3}); 
+                drawConnectors(canvasCtx, results.leftHandLandmarks, HAND_CONNECTIONS, {color: 'rgba(236, 72, 153, 0.6)', lineWidth: 2});
+                drawLandmarks(canvasCtx, results.leftHandLandmarks, {color: '#fdf2f8', radius: 3});
             }
             if (results.rightHandLandmarks) {
-                drawConnectors(canvasCtx, results.rightHandLandmarks, HAND_CONNECTIONS, {color: '#ec4899', lineWidth: 3}); 
+                drawConnectors(canvasCtx, results.rightHandLandmarks, HAND_CONNECTIONS, {color: 'rgba(236, 72, 153, 0.6)', lineWidth: 2});
+                drawLandmarks(canvasCtx, results.rightHandLandmarks, {color: '#fdf2f8', radius: 3});
             }
-            
-            runMobilityTests(results);
+
             canvasCtx.restore();
+
+            // Run Logic
+            detectSkipGesture(results);
+            runTestLogic(results);
         }
 
+        // --- INIT ---
         const holistic = new Holistic({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`});
         holistic.setOptions({
             modelComplexity: 1,
@@ -382,11 +653,12 @@
         holistic.onResults(onResults);
 
         startBtn.addEventListener('click', () => {
-            startBtn.classList.add('hidden');
+            startOverlay.classList.add('hidden');
             loadingView.classList.remove('hidden');
+            
             const camera = new Camera(videoElement, {
                 onFrame: async () => {
-                    if (videoElement.videoWidth > 0 && canvasElement.width !== videoElement.videoWidth) {
+                    if (videoElement.videoWidth && canvasElement.width !== videoElement.videoWidth) {
                         canvasElement.width = videoElement.videoWidth;
                         canvasElement.height = videoElement.videoHeight;
                     }
@@ -396,7 +668,16 @@
                 height: 720
             });
             camera.start();
-            testState.startTime = Date.now(); 
+            testState.startTime = Date.now();
+        });
+
+        flipBtn.addEventListener('click', () => {
+            isMirrored = !isMirrored;
+            flipBtn.classList.toggle('bg-cyan-900');
+        });
+
+        aboutBtn.addEventListener('click', () => {
+            document.getElementById('info-panel').classList.remove('hidden');
         });
 
     </script>
